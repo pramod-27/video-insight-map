@@ -39,6 +39,7 @@ try:
     app.include_router(plaintext_summarization_router, prefix="/api", tags=["Plaintext Summarization"])
 except Exception as e:
     logger.error(f"Failed to load routes: {str(e)}")
+    raise  # Crash early for logs
 
 @app.get("/", tags=["Root"])
 async def root():
@@ -50,6 +51,7 @@ async def ping():
 
 @app.get("/health", tags=["Health"])
 async def health():
+    logger.info("Health check hit")
     return {"status": "healthy"}
 
 if __name__ == "__main__":
@@ -57,6 +59,7 @@ if __name__ == "__main__":
     logger.info(f"Starting server on port {port}")
     time.sleep(5)
     try:
-        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False, log_level="info")  # Disable reload for stability
     except Exception as e:
         logger.error(f"Uvicorn failed: {str(e)}")
+        raise
