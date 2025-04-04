@@ -53,9 +53,9 @@ async def health():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))  # Match Railway
+    port = int(os.getenv("PORT", 8080))
     logger.info(f"Starting server on port {port}")
-    time.sleep(5)  # Give Railway time
+    time.sleep(5)
     try:
         uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
     except Exception as e:
