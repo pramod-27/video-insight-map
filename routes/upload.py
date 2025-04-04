@@ -8,13 +8,14 @@ from routes.summarization import summarize_text, TranscriptionRequest
 from routes.mapping import map_timestamps, MappingRequest
 import ffmpeg
 import shutil
+import traceback
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Load model with minimal settings
+# Minimal Whisper model, single thread
 model = WhisperModel("tiny.en", device="cpu", compute_type="int8", cpu_threads=1)
 logger.info("Whisper tiny.en model loaded successfully")
 
@@ -36,12 +37,12 @@ async def upload_file(
     logger.info(f"Starting upload: file={file.filename if file else None}, url={youtube_url}")
     try:
         if file:
-            transcription_result = await process_local_video(file, background_tasks)
+            result = await process_local_video(file, background_tasks)
         else:
-            transcription_result = await process_youtube_video(youtube_url)
+            result = await process_youtube_video(youtube_url, background_tasks)
         
-        transcription_data = transcription_result["transcription"]
-        duration = transcription_result["duration"]
+        transcription_data = result["transcription"]
+        duration = result["duration"]
         logger.info(f"Transcription done: {len(transcription_data)} segments, duration={duration}s")
         
         transcription_request = TranscriptionRequest(transcription=transcription_data)
@@ -55,7 +56,7 @@ async def upload_file(
         logger.info(f"Mapped {len(mapped_data)} key points")
 
         return {
-            "message": transcription_result["message"],
+            "message": result["message"],
             "source": file.filename if file else youtube_url,
             "mapped_data": mapped_data
         }
@@ -71,6 +72,8 @@ async def process_local_video(file: UploadFile, background_tasks: BackgroundTask
             content = await file.read()
             if not content:
                 raise HTTPException(status_code=400, detail="Uploaded file is empty")
+            if len(content) > 50 * 1024 * 1024:  # 50MB limit
+                raise HTTPException(status_code=400, detail="File too large, max 50MB")
             temp_file.write(content)
             logger.info(f"Local file saved to {temp_path}")
             
@@ -89,21 +92,22 @@ async def process_local_video(file: UploadFile, background_tasks: BackgroundTask
             background_tasks.add_task(cleanup_file, temp_path)
             raise HTTPException(status_code=500, detail=f"Local video processing failed: {str(e)}")
 
-async def process_youtube_video(youtube_url: str):
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_base = os.path.join(temp_dir, "audio")
-        temp_path = f"{temp_base}.mp3"
+async def process_youtube_video(youtube_url: str, background_tasks: BackgroundTasks):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+        temp_path = temp_file.name
         ydl_opts = {
             "format": "bestaudio/best",
-            "outtmpl": temp_base,
+            "outtmpl": temp_path[:-4],  # Strip .mp3 for yt-dlp
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
-                "preferredquality": "192",
+                "preferredquality": "64",  # Low quality to save memory
             }],
             "quiet": False,
             "no_warnings": False,
             "retries": 3,
+            "fragment_retries": 3,
+            "buffersize": "16k",  # Smaller buffer
         }
         
         try:
@@ -114,34 +118,61 @@ async def process_youtube_video(youtube_url: str):
 
             if not os.path.exists(temp_path):
                 raise HTTPException(status_code=500, detail="YouTube download failed")
-            transcription_data = transcribe_video(temp_path)
+            
+            # Chunked transcription for memory efficiency
+            transcription_data = transcribe_video_chunks(temp_path, duration)
+            background_tasks.add_task(cleanup_file, temp_path)
             return {
                 "message": "YouTube video processed successfully",
                 "transcription": transcription_data,
                 "duration": duration
             }
         except Exception as e:
+            background_tasks.add_task(cleanup_file, temp_path)
             logger.error(f"YouTube processing error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"YouTube processing failed: {str(e)}")
 
-def transcribe_video(video_path: str):
-    if not os.path.exists(video_path):
-        raise HTTPException(status_code=500, detail=f"Video file not found at {video_path}")
-    segments, _ = model.transcribe(video_path, language="en")
-    transcription = [{"timestamp": seconds_to_hhmmss(segment.start), "text": segment.text.strip()} for segment in segments]
+def transcribe_video_chunks(audio_path: str, duration: float, chunk_size: int = 300):  # 5min chunks
+    """Transcribe audio in chunks to manage memory."""
+    if not os.path.exists(audio_path):
+        raise HTTPException(status_code=500, detail=f"Audio file not found at {audio_path}")
+    
+    transcription = []
+    for start in range(0, int(duration), chunk_size):
+        end = min(start + chunk_size, int(duration))
+        logger.info(f"Processing chunk: {start}s to {end}s")
+        try:
+            stream = ffmpeg.input(audio_path, ss=start, t=chunk_size)
+            chunk_path = f"/tmp/chunk_{start}_{end}.mp3"
+            stream.output(chunk_path, format="mp3", acodec="mp3", loglevel="quiet").run(overwrite_output=True)
+            
+            segments, _ = model.transcribe(chunk_path, language="en")
+            for segment in segments:
+                adjusted_start = segment.start + start
+                transcription.append({
+                    "timestamp": seconds_to_hhmmss(adjusted_start),
+                    "text": segment.text.strip()
+                })
+            cleanup_file(chunk_path)
+        except Exception as e:
+            logger.error(f"Chunk transcription failed: {str(e)}")
+            raise
     logger.info(f"Transcription completed with {len(transcription)} segments")
     return transcription
 
+def transcribe_video(video_path: str):
+    return transcribe_video_chunks(video_path, ffmpeg.probe(video_path)['format']['duration'])
+
 def cleanup_file(temp_path: str):
-    max_attempts = 10
+    max_attempts = 5
     for attempt in range(max_attempts):
         try:
             if os.path.exists(temp_path):
-                shutil.rmtree(temp_path, ignore_errors=True) if os.path.isdir(temp_path) else os.remove(temp_path)
+                os.remove(temp_path)
                 logger.info(f"Cleaned up temp file: {temp_path}")
             break
         except Exception as e:
             if attempt < max_attempts - 1:
-                time.sleep(1)
+                time.sleep(0.5)
             else:
                 logger.error(f"Failed to delete {temp_path}: {str(e)}")
