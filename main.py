@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import uvicorn
 import os
 import logging
@@ -29,8 +30,7 @@ except Exception as e:
 
 @app.get("/")
 async def root():
-    logger.info("Root endpoint hit")
-    return {"message": "Hello World!"}
+    return FileResponse("static/index.html")  # Serve index.html at root
 
 @app.get("/health")
 async def health():
