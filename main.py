@@ -44,6 +44,10 @@ async def root():
 async def ping():
     return {"message": "Backend is running!", "date": "April 04, 2025"}
 
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "healthy"}  # Quick response for Render
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     logger.info(f"Starting server on port {port}")
