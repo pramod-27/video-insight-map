@@ -8,6 +8,7 @@ from routes.summarization import summarize_text, TranscriptionRequest
 from routes.mapping import map_timestamps, MappingRequest
 import ffmpeg
 import shutil
+import traceback
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ async def upload_file(
     if not file and not youtube_url:
         raise HTTPException(status_code=400, detail="Provide either a file or a YouTube URL")
     
+    logger.info(f"Starting upload: file={file.filename if file else None}, url={youtube_url}")
     try:
         if file:
             transcription_result = await process_local_video(file, background_tasks)
@@ -40,8 +42,9 @@ async def upload_file(
         
         transcription_data = transcription_result["transcription"]
         duration = transcription_result["duration"]
-        transcription_request = TranscriptionRequest(transcription=transcription_data)
+        logger.info(f"Transcription done: {len(transcription_data)} segments, duration={duration}s")
         
+        transcription_request = TranscriptionRequest(transcription=transcription_data)
         summary_result = await summarize_text(transcription_request, duration=duration)
         key_points = summary_result["key_points"]
         logger.info(f"Generated {len(key_points)} key points")
@@ -57,8 +60,11 @@ async def upload_file(
             "mapped_data": mapped_data
         }
     except Exception as e:
-        logger.error(f"Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+        error_detail = f"Upload failed: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_detail)
+        raise HTTPException(status_code=500, detail=error_detail)
+
+# Rest of your upload.py remains unchanged...
 
 async def process_local_video(file: UploadFile, background_tasks: BackgroundTasks):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
