@@ -40,4 +40,6 @@ async def ping():
     return {"message": "Backend is running!", "date": "April 04, 2025"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+    import os
+    port = int(os.getenv("PORT", 8000))  # Use Render's PORT or default to 8000
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
