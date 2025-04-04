@@ -1,0 +1,11 @@
+ fastapi==0.115.12
+uvicorn==0.34.0
+faster-whisper==1.1.1
+ffmpeg-python==0.2.0
+python-multipart==0.0.20
+yt-dlp==2025.3.27
+python-dotenv==1.1.0
+google-generativeai==0.8.4
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.27.1
+PyYAML==6.0.2
