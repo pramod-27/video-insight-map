@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["ffmpeg"]  # Installs FFmpeg with ffprobe
+nixPkgs = ["python312", "ffmpeg"]  # Python 3.12 + FFmpeg
 
 [phases.build]
-cmd = "pip install -r requirements.txt"
+cmd = "python -m venv /opt/venv && . /opt/venv/bin/activate && pip install -r requirements.txt"
 
 [start]
 cmd = "python main.py"
