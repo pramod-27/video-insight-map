@@ -8,14 +8,14 @@ from routes.summarization import summarize_text, TranscriptionRequest
 from routes.mapping import map_timestamps, MappingRequest
 import ffmpeg
 import shutil
-import traceback
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+# Load model with minimal settings
+model = WhisperModel("tiny.en", device="cpu", compute_type="int8", cpu_threads=1)
 logger.info("Whisper tiny.en model loaded successfully")
 
 def seconds_to_hhmmss(seconds: float) -> str:
@@ -63,8 +63,6 @@ async def upload_file(
         error_detail = f"Upload failed: {str(e)}\n{traceback.format_exc()}"
         logger.error(error_detail)
         raise HTTPException(status_code=500, detail=error_detail)
-
-# Rest of your upload.py remains unchanged...
 
 async def process_local_video(file: UploadFile, background_tasks: BackgroundTasks):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
