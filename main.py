@@ -25,17 +25,20 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-from routes.transcription import router as transcription_router
-from routes.summarization import router as summarization_router
-from routes.mapping import router as mapping_router
-from routes.upload import router as upload_router
-from routes.plaintext_summarization import router as plaintext_summarization_router
+try:
+    from routes.transcription import router as transcription_router
+    from routes.summarization import router as summarization_router
+    from routes.mapping import router as mapping_router
+    from routes.upload import router as upload_router
+    from routes.plaintext_summarization import router as plaintext_summarization_router
 
-app.include_router(upload_router, prefix="/api", tags=["Upload"])
-app.include_router(transcription_router, prefix="/api", tags=["Transcription"])
-app.include_router(summarization_router, prefix="/api", tags=["Summarization"])
-app.include_router(mapping_router, prefix="/api", tags=["Mapping"])
-app.include_router(plaintext_summarization_router, prefix="/api", tags=["Plaintext Summarization"])
+    app.include_router(upload_router, prefix="/api", tags=["Upload"])
+    app.include_router(transcription_router, prefix="/api", tags=["Transcription"])
+    app.include_router(summarization_router, prefix="/api", tags=["Summarization"])
+    app.include_router(mapping_router, prefix="/api", tags=["Mapping"])
+    app.include_router(plaintext_summarization_router, prefix="/api", tags=["Plaintext Summarization"])
+except Exception as e:
+    logger.error(f"Failed to load routes: {str(e)}")
 
 @app.get("/", tags=["Root"])
 async def root():
@@ -50,7 +53,10 @@ async def health():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))  # Match Railway
     logger.info(f"Starting server on port {port}")
-    time.sleep(5)  # Delay to let Render detect port
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
+    time.sleep(5)  # Give Railway time
+    try:
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
+    except Exception as e:
+        logger.error(f"Uvicorn failed: {str(e)}")
