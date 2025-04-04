@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["ffmpeg"]  # Installs FFmpeg with ffprobe
+
+[phases.build]
+cmd = "pip install -r requirements.txt"
+
+[start]
+cmd = "python main.py"
