@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  # Add this
+from fastapi.staticfiles import StaticFiles
 import uvicorn
-from routes.transcription import router as transcription_router
-from routes.summarization import router as summarization_router
-from routes.mapping import router as mapping_router
-from routes.upload import router as upload_router
-from routes.plaintext_summarization import router as plaintext_summarization_router
+import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Video Insight Mapping API",
@@ -22,8 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+from routes.transcription import router as transcription_router
+from routes.summarization import router as summarization_router
+from routes.mapping import router as mapping_router
+from routes.upload import router as upload_router
+from routes.plaintext_summarization import router as plaintext_summarization_router
 
 app.include_router(upload_router, prefix="/api", tags=["Upload"])
 app.include_router(transcription_router, prefix="/api", tags=["Transcription"])
@@ -40,6 +45,6 @@ async def ping():
     return {"message": "Backend is running!", "date": "April 04, 2025"}
 
 if __name__ == "__main__":
-    import os
-    port = int(os.getenv("PORT", 8000))  # Use Render's PORT or default to 8000
+    port = int(os.getenv("PORT", 8000))
+    logger.info(f"Starting server on port {port}")
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, log_level="info")
